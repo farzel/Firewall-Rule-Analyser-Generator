@@ -1,0 +1,38 @@
+[
+    {
+        "rule_id": "1",
+        "name": "Allow-Internal-Outbound",
+        "srcintf": "port1",
+        "dstintf": "port2",
+        "srcaddr": "Internal_Subnet",
+        "dstaddr": "all",
+        "action": "accept",
+        "schedule": "always",
+        "service": "ALL",
+        "logtraffic": "all"
+    },
+    {
+        "rule_id": "2",
+        "name": "Overly-Permissive-Test",
+        "srcintf": "any",
+        "dstintf": "any",
+        "srcaddr": "all",
+        "dstaddr": "all",
+        "action": "accept",
+        "schedule": "always",
+        "service": "ALL",
+        "logtraffic": "disable"
+    },
+    {
+        "rule_id": "3",
+        "name": "Block-Malicious-IP",
+        "srcintf": "any",
+        "dstintf": "any",
+        "srcaddr": "Malicious_IPs",
+        "dstaddr": "all",
+        "action": "deny",
+        "schedule": "always",
+        "service": "ALL",
+        "logtraffic": "all"
+    }
+]
