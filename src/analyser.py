@@ -1,87 +1,88 @@
-import json
-import os
+from __future__ import annotations
 
-def analyze_rules(parsed_rules):
-    """
-    Scans a list of parsed firewall rules for common security vulnerabilities.
-    Returns a list of identified issues.
-    """
-    vulnerabilities = []
-    seen_catch_all = False
-    catch_all_rule_id = None
+import json
+from pathlib import Path
+from typing import Any
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_INPUT_PATH = PROJECT_ROOT / 'output' / 'parsed_rules.json'
+DEFAULT_OUTPUT_PATH = PROJECT_ROOT / 'output' / 'vulnerability_report.json'
+ACCEPT_ACTION = 'accept'
+ALL_VALUE = 'all'
+DISABLE_LOGGING = 'disable'
+
+
+def _normalise(value: Any, default: str = '') -> str:
+    if value is None:
+        return default
+    return str(value).strip().lower()
+
+
+def analyze_rules(parsed_rules: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Scan parsed firewall rules for common security vulnerabilities."""
+    vulnerabilities: list[dict[str, str]] = []
+    catch_all_rule_id: str | None = None
 
     for rule in parsed_rules:
-        rule_id = rule.get('rule_id', 'Unknown')
-        action = rule.get('action', '')
-        srcaddr = rule.get('srcaddr', '')
-        dstaddr = rule.get('dstaddr', '')
-        logtraffic = rule.get('logtraffic', '')
+        rule_id = str(rule.get('rule_id', 'Unknown'))
+        action = _normalise(rule.get('action'))
+        srcaddr = _normalise(rule.get('srcaddr'))
+        dstaddr = _normalise(rule.get('dstaddr'))
+        logtraffic = _normalise(rule.get('logtraffic'))
 
-        # Vulnerability 1: Overly Permissive Rule (ANY to ANY)
-        if action == "accept" and srcaddr == "all" and dstaddr == "all":
-            vulnerabilities.append({
-                "rule_id": rule_id,
-                "issue": "Overly Permissive Rule",
-                "severity": "High",
-                "description": "Rule allows ALL source traffic to ALL destinations. This violates the principle of least privilege."
-            })
-            # Mark that we've seen a catch-all, which means subsequent rules might be shadowed
-            seen_catch_all = True
+        if action == ACCEPT_ACTION and srcaddr == ALL_VALUE and dstaddr == ALL_VALUE:
+            vulnerabilities.append(
+                {
+                    'rule_id': rule_id,
+                    'issue': 'Overly Permissive Rule',
+                    'severity': 'High',
+                    'description': 'Rule allows ALL source traffic to ALL destinations. This violates the principle of least privilege.',
+                }
+            )
             catch_all_rule_id = rule_id
 
-        # Vulnerability 2: Logging Disabled on Accept Rules
-        if action == "accept" and logtraffic == "disable":
-            vulnerabilities.append({
-                "rule_id": rule_id,
-                "issue": "Logging Disabled",
-                "severity": "Medium",
-                "description": "Rule accepts traffic but logging is disabled. This creates a blind spot for incident response."
-            })
+        if action == ACCEPT_ACTION and logtraffic == DISABLE_LOGGING:
+            vulnerabilities.append(
+                {
+                    'rule_id': rule_id,
+                    'issue': 'Logging Disabled',
+                    'severity': 'Medium',
+                    'description': 'Rule accepts traffic but logging is disabled. This creates a blind spot for incident response.',
+                }
+            )
 
-        # Vulnerability 3: Shadowed Rules
-        # If a previous rule allowed ALL traffic, this current rule will never be triggered.
-        elif seen_catch_all and rule_id != catch_all_rule_id:
-             vulnerabilities.append({
-                "rule_id": rule_id,
-                "issue": "Shadowed Rule",
-                "severity": "Medium",
-                "description": f"This rule is shadowed by overly permissive Rule {catch_all_rule_id} higher up in the policy list and will never trigger."
-            })
+        if catch_all_rule_id and rule_id != catch_all_rule_id:
+            vulnerabilities.append(
+                {
+                    'rule_id': rule_id,
+                    'issue': 'Shadowed Rule',
+                    'severity': 'Medium',
+                    'description': f'This rule is shadowed by overly permissive Rule {catch_all_rule_id} higher up in the policy list and will never trigger.',
+                }
+            )
 
     return vulnerabilities
 
-if __name__ == "__main__":
-    # 1. Set up bulletproof file paths
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # Safely define the output directory
-    output_dir = os.path.join(script_dir, "..", "output")
-    os.makedirs(output_dir, exist_ok=True)
-    
-    input_path = os.path.join(output_dir, "parsed_rules.json")
-    output_path = os.path.join(output_dir, "vulnerability_report.json")
 
-    # 2. Load the parsed data
+if __name__ == '__main__':
+    DEFAULT_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+
     try:
-        with open(input_path, 'r') as infile:
+        with DEFAULT_INPUT_PATH.open('r', encoding='utf-8') as infile:
             rules = json.load(infile)
-            
-        print(f"Analyzing {len(rules)} rules...\n")
-        
-        # 3. Run the analysis
+
+        print(f'Analyzing {len(rules)} rules...\n')
         report = analyze_rules(rules)
 
-        # 4. Output the results
         if report:
-            print("⚠️ Vulnerabilities Found:")
+            print('⚠️ Vulnerabilities Found:')
             print(json.dumps(report, indent=4))
-            
-            # Save the executive report
-            with open(output_path, 'w') as outfile:
+
+            with DEFAULT_OUTPUT_PATH.open('w', encoding='utf-8') as outfile:
                 json.dump(report, outfile, indent=4)
-            print(f"\n✅ Report successfully saved to:\n{output_path}")
+            print(f'\n✅ Report successfully saved to:\n{DEFAULT_OUTPUT_PATH}')
         else:
-            print("✅ No vulnerabilities found! The configuration looks secure.")
+            print('✅ No vulnerabilities found! The configuration looks secure.')
 
     except FileNotFoundError:
-        print(f"❌ Error: Could not find {input_path}. Did you run parser.py first?")
+        print(f'❌ Error: Could not find {DEFAULT_INPUT_PATH}. Did you run parser.py first?')
