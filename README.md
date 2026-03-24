@@ -1,0 +1,33 @@
+# Automated FortiOS Firewall Rule Analyser
+
+## Overview
+This repository contains an automated vulnerability detection engine for Fortinet (FortiOS) firewall configurations. It is engineered to parse complex rule sets, normalise the data into structured JSON, and systematically hunt for logical flaws and security misconfigurations. 
+
+This tool was developed as part of an MSc cybersecurity project to demonstrate the practical application of automated analysis and AI-assisted development in modern network security workflows.
+
+## Core Features
+* **Configuration Parsing:** Automatically extracts and structures raw FortiOS `set` and `edit` commands into machine-readable JSON arrays.
+* **Vulnerability Detection Engine:** Scans parsed rule sets to identify:
+    * **Overly Permissive Rules:** Flags rules allowing `all` traffic from `all` sources (violating the principle of least privilege).
+    * **Logging Blind Spots:** Detects `accept` rules where `logtraffic` has been dangerously disabled.
+    * **Shadowed Rules:** Identifies logical sequence errors where overly broad rules higher in the chain render subsequent rules useless.
+* **Enterprise-Scale Stress Testing:** Includes a bespoke data generator capable of synthesising 50,000+ realistic firewall rules to test parser efficiency.
+* **Zero Dependencies:** Built entirely using Python's standard library (`json`, `re`, `pathlib`) for maximum portability.
+
+## Project Structure
+```text
+Firewall-Rule-Analyser-Generator/
+│
+├── src/
+│   ├── generator.py    # Synthesises 50k+ test rules
+│   ├── parser.py       # Converts .conf files to JSON
+│   └── analyser.py     # Hunts for vulnerabilities
+│
+├── data/
+│   └── generated_50k_config.conf  # Raw input data
+│
+├── output/
+│   ├── parsed_rules.json          # Structured data
+│   └── vulnerability_report.json  # Final security report
+│
+└── README.md
