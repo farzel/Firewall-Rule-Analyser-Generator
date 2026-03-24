@@ -6,7 +6,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_PATH = PROJECT_ROOT / 'data' / 'generated_50k_config.conf'
 
 def generate_massive_config(num_rules=50000):
-    print(f"Generating {num_rules} firewall rules. This might take a few seconds...")
+    print(f"Generating {num_rules} completely randomized firewall rules...")
     
     # Ensure the data directory exists
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -17,9 +17,12 @@ def generate_massive_config(num_rules=50000):
         for i in range(1, num_rules + 1):
             f.write(f"    edit {i}\n")
             
-            # Plant a vulnerability at Rule 2 and every 10,000th rule
-            if i == 2 or i % 10000 == 0:
-                f.write(f'        set name "VULNERABLE-RULE-{i}"\n')
+            # Roll the dice to decide what kind of rule to build
+            chance = random.random()
+            
+            if chance < 0.0001:  
+                # 0.01% chance: Plant an Overly Permissive Rule (ANY to ANY)
+                f.write(f'        set name "CRITICAL-FLAW-{i}"\n')
                 f.write('        set srcintf "any"\n')
                 f.write('        set dstintf "any"\n')
                 f.write('        set srcaddr "all"\n')
@@ -28,6 +31,19 @@ def generate_massive_config(num_rules=50000):
                 f.write('        set schedule "always"\n')
                 f.write('        set service "ALL"\n')
                 f.write('        set logtraffic disable\n')
+                
+            elif chance < 0.005: 
+                # 0.5% chance: Plant a Logging Disabled blind spot
+                f.write(f'        set name "BLIND-SPOT-{i}"\n')
+                f.write(f'        set srcintf "port{random.randint(1, 4)}"\n')
+                f.write(f'        set dstintf "port{random.randint(1, 4)}"\n')
+                f.write(f'        set srcaddr "Subnet_{random.randint(1, 50)}"\n')
+                f.write(f'        set dstaddr "Server_{random.randint(1, 50)}"\n')
+                f.write('        set action accept\n')
+                f.write('        set schedule "always"\n')
+                f.write('        set service "HTTPS"\n')
+                f.write('        set logtraffic disable\n')
+                
             else:
                 # Generate a normal, secure rule
                 action = random.choice(['accept', 'deny'])
@@ -47,7 +63,7 @@ def generate_massive_config(num_rules=50000):
             
         f.write("end\n")
         
-    print(f"✅ Successfully generated {num_rules} rules at:\n{OUTPUT_PATH}")
+    print(f"✅ Successfully generated {num_rules} randomized rules at:\n{OUTPUT_PATH}")
 
 if __name__ == '__main__':
     generate_massive_config()
