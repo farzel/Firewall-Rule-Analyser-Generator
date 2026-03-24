@@ -39,7 +39,7 @@ class CoreWorkflowTests(unittest.TestCase):
                     'rule_id': '2',
                     'issue': 'Overly Permissive Rule',
                     'severity': 'High',
-                    'description': 'Rule allows ALL source traffic to ALL destinations. This violates the principle of least privilege.',
+                    'description': 'Rule allows ALL source traffic to ALL destinations/services. This violates the principle of least privilege.',
                 },
                 {
                     'rule_id': '2',

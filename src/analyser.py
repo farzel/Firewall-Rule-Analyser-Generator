@@ -2,17 +2,18 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable, Iterator
 
-# Bulletproof pathing
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_INPUT_PATH = PROJECT_ROOT / 'output' / 'parsed_rules.json'
 DEFAULT_OUTPUT_PATH = PROJECT_ROOT / 'output' / 'vulnerability_report.json'
 
-# Constants for cleaner code
 ACCEPT_ACTION = 'accept'
 ALL_VALUE = 'all'
+ANY_VALUE = 'any'
 DISABLE_LOGGING = 'disable'
+PERMISSIVE_VALUES = frozenset((ALL_VALUE, ANY_VALUE))
+
 
 def _normalise(value: Any, default: str = '') -> str:
     """Helper function to clean up string comparisons."""
@@ -20,59 +21,61 @@ def _normalise(value: Any, default: str = '') -> str:
         return default
     return str(value).strip().lower()
 
-def analyse_rules(parsed_rules: list[dict[str, Any]]) -> list[dict[str, str]]:
-    """Scan parsed firewall rules for common security vulnerabilities."""
-    vulnerabilities: list[dict[str, str]] = []
+
+def iter_rule_findings(parsed_rules: Iterable[dict[str, Any]]) -> Iterator[dict[str, str]]:
+    """Yield vulnerability findings in a single pass over parsed firewall rules."""
     catch_all_rule_id: str | None = None
+    normalise = _normalise
+    permissive_values = PERMISSIVE_VALUES
 
     for rule in parsed_rules:
         rule_id = str(rule.get('rule_id', 'Unknown'))
-        action = _normalise(rule.get('action'))
-        srcaddr = _normalise(rule.get('srcaddr'))
-        dstaddr = _normalise(rule.get('dstaddr'))
-        logtraffic = _normalise(rule.get('logtraffic'))
+        action = normalise(rule.get('action'))
+        srcaddr = normalise(rule.get('srcaddr'))
+        dstaddr = normalise(rule.get('dstaddr'))
+        service = normalise(rule.get('service'))
+        logtraffic = normalise(rule.get('logtraffic'))
 
-        # Vulnerability 1: Overly Permissive Rule (ANY to ANY)
-        if action == ACCEPT_ACTION and srcaddr == ALL_VALUE and dstaddr == ALL_VALUE:
-            vulnerabilities.append(
-                {
-                    'rule_id': rule_id,
-                    'issue': 'Overly Permissive Rule',
-                    'severity': 'High',
-                    'description': 'Rule allows ALL source traffic to ALL destinations. This violates the principle of least privilege.',
-                }
-            )
-            # Mark that we've seen a catch-all, which means subsequent rules might be shadowed
-            if not catch_all_rule_id:
+        is_overly_permissive = (
+            action == ACCEPT_ACTION
+            and srcaddr in permissive_values
+            and dstaddr in permissive_values
+            and service in permissive_values
+        )
+
+        if is_overly_permissive:
+            yield {
+                'rule_id': rule_id,
+                'issue': 'Overly Permissive Rule',
+                'severity': 'High',
+                'description': 'Rule allows ALL source traffic to ALL destinations/services. This violates the principle of least privilege.',
+            }
+            if catch_all_rule_id is None:
                 catch_all_rule_id = rule_id
 
-        # Vulnerability 2: Logging Disabled on Accept Rules
         if action == ACCEPT_ACTION and logtraffic == DISABLE_LOGGING:
-            vulnerabilities.append(
-                {
-                    'rule_id': rule_id,
-                    'issue': 'Logging Disabled',
-                    'severity': 'Medium',
-                    'description': 'Rule accepts traffic but logging is disabled. This creates a blind spot for incident response.',
-                }
-            )
+            yield {
+                'rule_id': rule_id,
+                'issue': 'Logging Disabled',
+                'severity': 'Medium',
+                'description': 'Rule accepts traffic but logging is disabled. This creates a blind spot for incident response.',
+            }
 
-        # Vulnerability 3: Shadowed Rules
-        if catch_all_rule_id and rule_id != catch_all_rule_id:
-            vulnerabilities.append(
-                {
-                    'rule_id': rule_id,
-                    'issue': 'Shadowed Rule',
-                    'severity': 'Medium',
-                    'description': f'This rule is shadowed by overly permissive Rule {catch_all_rule_id} higher up in the policy list and will never trigger.',
-                }
-            )
+        if catch_all_rule_id is not None and rule_id != catch_all_rule_id:
+            yield {
+                'rule_id': rule_id,
+                'issue': 'Shadowed Rule',
+                'severity': 'Medium',
+                'description': f'This rule is shadowed by overly permissive Rule {catch_all_rule_id} higher up in the policy list and will never trigger.',
+            }
 
-    return vulnerabilities
+
+def analyse_rules(parsed_rules: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Scan parsed firewall rules for common security vulnerabilities."""
+    return list(iter_rule_findings(parsed_rules))
 
 
 if __name__ == '__main__':
-    # Ensure output directory exists safely
     DEFAULT_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -84,8 +87,6 @@ if __name__ == '__main__':
 
         if report:
             print(f'⚠️ Found {len(report)} Vulnerabilities!')
-            
-            # Save the report
             with DEFAULT_OUTPUT_PATH.open('w', encoding='utf-8') as outfile:
                 json.dump(report, outfile, indent=4)
             print(f'✅ Full report successfully saved to:\n{DEFAULT_OUTPUT_PATH}')
