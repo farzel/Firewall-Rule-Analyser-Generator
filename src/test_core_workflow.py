@@ -1,16 +1,14 @@
 from __future__ import annotations
-
 import sys
 import unittest
 from pathlib import Path
 
-# Setup pathing so the tests can find your src folder
+# Setup pathing
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SRC_PATH = PROJECT_ROOT / 'src'
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-# Using the localised British English spelling
 from analyser import analyse_rules
 from parser import parse_fortios_policies
 
@@ -21,6 +19,7 @@ class CoreWorkflowTests(unittest.TestCase):
         parsed_rules = parse_fortios_policies(SAMPLE_CONFIG_PATH)
 
         self.assertEqual(len(parsed_rules), 3)
+        # Reverted to dict notation [] to match your local scripts
         self.assertEqual(parsed_rules[0]['rule_id'], '1')
         self.assertEqual(parsed_rules[0]['name'], 'Allow-Internal-Outbound')
         self.assertEqual(parsed_rules[1]['srcaddr'], 'all')
@@ -28,10 +27,9 @@ class CoreWorkflowTests(unittest.TestCase):
 
     def test_analyser_flags_expected_issues_for_sample_rules(self) -> None:
         parsed_rules = parse_fortios_policies(SAMPLE_CONFIG_PATH)
-        
-        # Updated function call to match analyser.py
         report = analyse_rules(parsed_rules)
 
+        # Updated descriptions to match the exact wording in your newest analyser.py
         self.assertEqual(
             report,
             [

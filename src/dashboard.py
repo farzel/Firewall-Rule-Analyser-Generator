@@ -1,7 +1,6 @@
 import json
 import sys
 from pathlib import Path
-
 import pandas as pd
 import streamlit as st
 
@@ -9,6 +8,7 @@ import streamlit as st
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(PROJECT_ROOT / 'src'))
 
+# Import the logic engines directly
 from analyser import iter_rule_findings
 from parser import iter_fortios_policies
 
@@ -32,82 +32,75 @@ uploaded_file = st.file_uploader('Upload Fortigate Configuration File', type=['c
 
 # --- Processing Logic ---
 if uploaded_file is not None:
+    # 1. Save the dropped file safely to the data folder
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     temp_config_path = UPLOAD_DIR / 'uploaded_config.conf'
-
-    with temp_config_path.open('wb') as uploaded_stream:
-        uploaded_stream.write(uploaded_file.getbuffer())
-
+    
+    with open(temp_config_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+        
     st.success(f"File '{uploaded_file.name}' successfully uploaded.")
 
+    # 2. Run the Engine LIVE on the uploaded file
+    with st.spinner("⚙️ Parsing firewall rules..."):
+        # We force it into a list to ensure we are using the FRESH data
+        parsed_rules = list(iter_fortios_policies(temp_config_path))
+        
+    with st.spinner("🕵️‍♂️ Analysing security posture..."):
+        # We pass the FRESHLY parsed rules directly to the analyser
+        vulnerabilities = list(iter_rule_findings(parsed_rules))
+
+    # 3. Save these specific results to disk (Optional, for record keeping)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    with open(RULES_PATH, 'w', encoding='utf-8') as f:
+        json.dump(parsed_rules, f, indent=4)
+    with open(REPORT_PATH, 'w', encoding='utf-8') as f:
+        json.dump(vulnerabilities, f, indent=4)
 
-    with st.spinner('⚙️ Parsing and analysing firewall rules...'):
-        # Single-pass stream: persist parsed rules while feeding the analyser.
-        rules_counter = [0]
-
-        def stream_rules_to_json():
-            with RULES_PATH.open('w', encoding='utf-8') as parsed_file:
-                parsed_file.write('[\n')
-                first = True
-                for rule in iter_fortios_policies(temp_config_path):
-                    rules_counter[0] += 1
-                    if not first:
-                        parsed_file.write(',\n')
-                    json.dump(rule, parsed_file)
-                    first = False
-                    yield rule
-                parsed_file.write('\n]\n')
-
-        vulnerabilities = list(iter_rule_findings(stream_rules_to_json()))
-        total_rules = rules_counter[0]
-
-    with REPORT_PATH.open('w', encoding='utf-8') as report_file:
-        json.dump(vulnerabilities, report_file, indent=4)
-
-    st.markdown('---')
+    st.markdown("---")
 
     # --- Top Row: KPI Metrics ---
-    st.subheader('Executive Summary')
+    st.subheader("Executive Summary")
     col1, col2, col3, col4 = st.columns(4)
-
+    
+    total_rules = len(parsed_rules)
     total_vulns = len(vulnerabilities)
     high_sev = sum(1 for v in vulnerabilities if v.get('severity') == 'High')
     med_sev = sum(1 for v in vulnerabilities if v.get('severity') == 'Medium')
-
-    col1.metric('Total Rules Analysed', f'{total_rules:,}')
-    col2.metric('Total Vulnerabilities', total_vulns)
-    col3.metric('🔴 High Severity', high_sev)
-    col4.metric('🟠 Medium Severity', med_sev)
-
-    st.markdown('---')
+    
+    col1.metric("Total Rules Analysed", f"{total_rules:,}")
+    col2.metric("Total Vulnerabilities", total_vulns)
+    col3.metric("🔴 High Severity", high_sev)
+    col4.metric("🟠 Medium Severity", med_sev)
+    
+    st.markdown("---")
 
     # --- Middle Row: Charts and Visuals ---
     if total_vulns > 0:
         col_chart, col_data = st.columns([1, 2])
-
+        
         with col_chart:
-            st.subheader('Issue Distribution')
+            st.subheader("Issue Distribution")
             df_vulns = pd.DataFrame(vulnerabilities)
             issue_counts = df_vulns['issue'].value_counts()
-            st.bar_chart(issue_counts, color='#ff4b4b')
-
+            st.bar_chart(issue_counts, color="#ff4b4b")
+            
         with col_data:
-            st.subheader('Actionable Intelligence')
-            st.markdown('The following rules require immediate remediation to align with the principle of least privilege.')
+            st.subheader("Actionable Intelligence")
+            st.markdown("The following rules require immediate remediation.")
             st.dataframe(
-                df_vulns[['rule_id', 'severity', 'issue', 'description']],
+                df_vulns[['rule_id', 'severity', 'issue', 'description']], 
                 use_container_width=True,
-                hide_index=True,
+                hide_index=True
             )
-
+            
     else:
         if total_rules > 0:
-            st.success('✅ The configuration is secure. No vulnerabilities detected.')
+            st.success("✅ The configuration is secure. No vulnerabilities detected.")
         else:
-            st.error('❌ No rules could be parsed. Please check the file format.')
+            st.error("❌ No rules could be parsed. Please check the file format.")
 
-    st.markdown('---')
-    st.caption('Developed for academic evaluation. Do not deploy raw configurations directly to production without manual review.')
+    st.markdown("---")
+    st.caption("Developed for academic evaluation. Do not deploy raw configurations directly to production without manual review.")
 else:
-    st.info(' Please upload a `.conf` file to begin the analysis.')
+    st.info("Please upload a `.conf` file to begin the analysis.")
