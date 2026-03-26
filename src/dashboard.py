@@ -23,7 +23,7 @@ st.set_page_config(page_title='FortiOS Vulnerability Analyser', page_icon='🛡�
 
 # --- Header Section ---
 st.title('🛡️ Automated FortiOS Firewall Analyser')
-st.markdown('**MSc Cybersecurity Project — Kingston University**')
+st.markdown('**CI7526 - K2534749**')
 st.markdown('Drag and drop a FortiOS `.conf` file below to automatically parse the rules and generate a vulnerability assessment.')
 st.markdown('---')
 
